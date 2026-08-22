@@ -1,0 +1,16 @@
+[package]
+name = "csvdiff"
+version = "0.1.0"
+edition = "2021"
+description = "Compare two CSV exports by key and report what actually changed"
+license = "MIT"
+repository = "https://github.com/dkautomation23/csvdiff"
+
+[dependencies]
+csv = "1"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

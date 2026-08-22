@@ -1,0 +1,146 @@
+# csvdiff
+
+Compares two CSV exports by key and reports what actually changed — added,
+removed, and which columns moved, with the value transitions counted.
+
+```bash
+csvdiff before.csv after.csv --key customer_id --ignore updated_at
+```
+
+Two million rows (118 MB) in 3.5 seconds, holding 16 bytes per row.
+
+## Why
+
+"The data does not match after the migration" is a week of work, and it always
+starts the same way: two exports, Excel, VLOOKUP, and a growing suspicion that
+the differences are mostly noise.
+
+They usually are. Run the same two files without thinking about it and you get
+this:
+
+```console
+$ csvdiff before_1m.csv after_1m.csv --key customer_id
+
+1000000 row(s) before, 1000000 after - 5000 added, 5000 removed, 995000 changed  (8.7s)
+
+What moved, by column
+  updated_at               995000 row(s)
+      995000 x  2026-07-01 -> 2026-08-22
+  status                    13319 row(s)
+        6726 x  active -> churned
+```
+
+995 000 "changes" are one timestamp column that moves on every export. The
+13 319 that matter are underneath. Say so and the report becomes readable:
+
+```console
+$ csvdiff before_1m.csv after_1m.csv --key customer_id --ignore updated_at
+
+1000000 row(s) before, 1000000 after - 5000 added, 5000 removed, 13319 changed  (3.5s)
+
+What moved, by column
+  status                   13319 row(s)
+        6726 x  active -> churned
+        6593 x  trial -> churned
+
+Added (5000)
+  1000001
+  ... and 4995 more
+```
+
+The per-column breakdown with counted transitions is the part that answers the
+actual question — *what happened to this data* — rather than handing over
+13 319 rows to read.
+
+## What it decides not to call a change
+
+Two systems write the same value differently, and a diff that does not know
+this is useless:
+
+| Written as | Also written as | Treated as |
+| --- | --- | --- |
+| `1000` | `1000.00`, `1,000.00`, `1.000,00` | the same number |
+| `` (empty) | `NULL`, `None`, `NaN`, `\N`, `   ` | the same nothing |
+| `1000.00` | `1000.01` | **different** - money keeps its cents |
+| `12 units` | `12` | **different** - text with digits is text |
+
+`--strict` turns all of that off and compares byte for byte. `--loose-text`
+goes the other way and ignores case and spacing inside text.
+
+## Broken rows are called out, not diffed
+
+A single unquoted separator shifts every column after it, and a naive diff then
+reports four "changes" in one row:
+
+```console
+WARNING: 1 row(s) in the old file and 0 in the new one have the wrong number of
+         fields - usually an unquoted separator inside a value. Every column after it
+         is shifted, so their differences below are not real.
+         line 3: 5 field(s)
+```
+
+Duplicate keys get the same treatment: if a key appears twice the comparison is
+not trustworthy, and the report says which file and how many, instead of quietly
+comparing the last one it saw.
+
+## How it stays small
+
+Three passes, so a ten-million-row file does not need ten million rows of RAM:
+
+1. read the old file, keep only `key -> row hash`;
+2. stream the new file — unknown key is *added*, matching hash is *unchanged*,
+   anything else is remembered as *changed*;
+3. read the old file once more, but only for the keys that changed, to work out
+   which columns moved.
+
+Only the rows that actually differ are ever held in full.
+
+## Install
+
+```bash
+git clone https://github.com/dkautomation23/csvdiff.git
+cd csvdiff
+cargo build --release
+./target/release/csvdiff samples/customers_before.csv samples/customers_after.csv --key customer_id --ignore updated_at
+```
+
+Rust 1.75+, single binary.
+
+```bash
+cargo test        # 13 tests: number formats, null spellings, key joins, ignored columns
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--key` | key column(s), comma separated - composite keys supported |
+| `--ignore` | columns to skip (`updated_at,exported_at,row_version`) |
+| `--strict` | byte-for-byte comparison, no normalisation |
+| `--loose-text` | also ignore case and inner whitespace |
+| `--out FILE` | write every difference as CSV: change, key, column, before, after |
+| `--delimiter` | for `;` exports |
+| `--examples` | how many examples to print per section (default 5) |
+
+Exit code is `1` when anything differs, so it works as a gate:
+
+```bash
+csvdiff yesterday.csv today.csv --key id --ignore updated_at --out changes.csv || notify-team changes.csv
+```
+
+## Honest limits
+
+- **The key must be a real key.** If it repeats, the tool warns and compares the
+  last row it saw for that key. It cannot guess which duplicate you meant.
+- **No fuzzy row matching.** A row whose key changed reads as one removal plus
+  one addition, because that is what it is at the data level.
+- **Column renames look like a removal and an addition** of the whole column.
+  The header note tells you which columns appeared and disappeared.
+- **Dates are compared as text.** `2026-08-22` and `22/08/2026` are different
+  values; normalising them would need a format guess per column, and guessing
+  wrong is worse than reporting the difference.
+- **The old file is read twice**, so it must be a seekable file, not a pipe.
+- Memory is roughly 60 bytes per row of the *old* file, plus the rows that
+  changed. A million rows measured at well under 200 MB.
+
+## License
+
+MIT

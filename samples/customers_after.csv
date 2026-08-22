@@ -1,0 +1,8 @@
+customer_id,name,country,plan,mrr,status,updated_at
+1001,Meridian Logistics,DE,business,"1.200,00",active,2026-08-22
+1002,Baker & Sons,GB,business,1200.00,active,2026-08-22
+1003,Delta Retail BV,NL,business,1200.00,churned,2026-08-22
+1004,Brightside Retail,IE,starter,89,active,2026-08-22
+1006,Kestrel Design,GB,starter,89,active,2026-08-22
+1007,Pinewood Interiors,SE,business,1250,active,2026-08-22
+1008,Halvorsen AS,NO,starter,89,trial,2026-08-22
