@@ -101,6 +101,19 @@ Only the rows that actually differ are ever held in full.
 
 ## Install
 
+A built binary for Linux, macOS (Apple silicon) and Windows is attached to
+every [release](https://github.com/dkautomation23/csvdiff/releases) — no toolchain,
+no compile step:
+
+```bash
+curl -sSL https://github.com/dkautomation23/csvdiff/releases/latest/download/csvdiff-v1.0.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+./csvdiff-v1.0.0-x86_64-unknown-linux-gnu/csvdiff --help
+```
+
+Each archive is built and tested on the platform it targets, not cross-compiled.
+
+To build it yourself:
+
 ```bash
 git clone https://github.com/dkautomation23/csvdiff.git
 cd csvdiff
