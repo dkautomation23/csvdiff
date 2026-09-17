@@ -108,7 +108,8 @@ cargo build --release
 ./target/release/csvdiff samples/customers_before.csv samples/customers_after.csv --key customer_id --ignore updated_at
 ```
 
-Rust 1.75+, single binary.
+Stable Rust, single binary. CI builds and tests on 1.98.0; the
+committed `Cargo.lock` is v4, so anything older than Cargo 1.78 cannot read it.
 
 ```bash
 cargo test        # 13 tests: number formats, null spellings, key joins, ignored columns
