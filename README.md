@@ -125,7 +125,7 @@ Stable Rust, single binary. CI builds and tests on 1.98.0; the
 committed `Cargo.lock` is v4, so anything older than Cargo 1.78 cannot read it.
 
 ```bash
-cargo test        # 13 tests: number formats, null spellings, key joins, ignored columns
+cargo test        # 16 tests: number formats, null spellings, key joins, ignored columns, overwrite guard
 ```
 
 | Flag | Meaning |
@@ -135,8 +135,16 @@ cargo test        # 13 tests: number formats, null spellings, key joins, ignored
 | `--strict` | byte-for-byte comparison, no normalisation |
 | `--loose-text` | also ignore case and inner whitespace |
 | `--out FILE` | write every difference as CSV: change, key, column, before, after |
+| `--force` | overwrite `--out` if it already exists (otherwise refused) |
 | `--delimiter` | for `;` exports |
 | `--examples` | how many examples to print per section (default 5) |
+
+A cell from either input file that starts with `=`, `+`, `-`, `@`, a tab or a
+carriage return is written to `--out` with a leading `'` so it opens as text,
+not as a formula, in Excel/LibreOffice/Sheets - otherwise a cell like
+`=cmd|'/C calc'!A0` in someone else's export would run when the report is
+opened. This only touches values copied from the input CSVs; the fixed
+`change`/`added`/`removed`/`changed` labels are never affected.
 
 Exit code is `1` when anything differs, so it works as a gate:
 
