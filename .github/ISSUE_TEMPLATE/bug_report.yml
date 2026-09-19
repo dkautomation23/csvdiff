@@ -1,0 +1,60 @@
+name: Bug report
+description: csvdiff crashed, missed a difference, or reported one that isn't real.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please don't attach real customer exports. Reproduce with
+        `bench/generate.py` (builds synthetic before/after CSVs from a fixed
+        seed) or a small hand-built CSV with the same column shapes and a
+        couple of rows that show the problem.
+  - type: input
+    id: version
+    attributes:
+      label: csvdiff version
+      description: Output of `csvdiff --version`
+      placeholder: csvdiff 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS (Apple silicon)
+        - Windows
+        - Other (say which, below)
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Exact command you ran
+      placeholder: csvdiff before.csv after.csv --key customer_id --ignore updated_at
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Minimal CSV that reproduces it
+      description: A few synthetic rows from each file are usually enough.
+      render: csv
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Which rows/columns should (or shouldn't) have been reported as changed.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Paste the terminal output if you can.
+      render: console
+    validations:
+      required: true
