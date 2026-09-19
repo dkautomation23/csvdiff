@@ -54,6 +54,10 @@ struct Args {
     #[arg(long)]
     out: Option<PathBuf>,
 
+    /// Overwrite --out if it already exists
+    #[arg(long)]
+    force: bool,
+
     /// How many examples to print per section
     #[arg(long, default_value_t = 5)]
     examples: usize,
@@ -363,22 +367,53 @@ WARNING: {} row(s) in the old file and {} in the new one have the wrong number o
     println!();
 }
 
-fn write_out(path: &Path, summary: &Summary) -> Result<(), String> {
+/// A cell that starts with one of these opens as a formula the moment a
+/// spreadsheet (Excel, LibreOffice, Google Sheets) loads the CSV - this is
+/// the standard CSV-injection payload shape, e.g. `=cmd|'/C calc'!A0`.
+/// Prefixing with `'` is the convention every one of those programs already
+/// honours to force a cell to stay text.
+const FORMULA_PREFIXES: [char; 4] = ['=', '+', '-', '@'];
+
+/// Escape a value that came out of the compared CSVs before it is written
+/// back out. Only call this on data from the files being compared - the
+/// fixed labels this tool writes itself ("added", "changed", ...) are never
+/// attacker controlled and do not need it.
+fn escape_formula(value: &str) -> String {
+    let opens_a_formula = matches!(value.chars().next(), Some(first) if FORMULA_PREFIXES.contains(&first) || first == '\t' || first == '\r');
+    if opens_a_formula {
+        format!("'{value}")
+    } else {
+        value.to_string()
+    }
+}
+
+fn write_out(path: &Path, summary: &Summary, force: bool) -> Result<(), String> {
+    // Silent overwrite has cost people a report before: --out defaults to
+    // refusing so a rerun never quietly eats an earlier result.
+    if !force && path.exists() {
+        return Err(format!("{} already exists; overwrite only with --force", path.display()));
+    }
     let mut writer = csv::Writer::from_path(path).map_err(|error| error.to_string())?;
     writer
         .write_record(["change", "key", "column", "before", "after"])
         .map_err(|error| error.to_string())?;
 
     for key in &summary.added {
-        writer.write_record(["added", &display_key(key), "", "", ""]).map_err(|e| e.to_string())?;
+        writer.write_record(["added", &escape_formula(&display_key(key)), "", "", ""]).map_err(|e| e.to_string())?;
     }
     for key in &summary.removed {
-        writer.write_record(["removed", &display_key(key), "", "", ""]).map_err(|e| e.to_string())?;
+        writer.write_record(["removed", &escape_formula(&display_key(key)), "", "", ""]).map_err(|e| e.to_string())?;
     }
     for (key, changes) in &summary.changed {
         for change in changes {
             writer
-                .write_record(["changed", &display_key(key), &change.column, &change.before, &change.after])
+                .write_record([
+                    "changed",
+                    &escape_formula(&display_key(key)),
+                    &escape_formula(&change.column),
+                    &escape_formula(&change.before),
+                    &escape_formula(&change.after),
+                ])
                 .map_err(|e| e.to_string())?;
         }
     }
@@ -402,7 +437,7 @@ fn main() {
     print_summary(&summary, &args, started.elapsed().as_secs_f64());
 
     if let Some(path) = &args.out {
-        if let Err(error) = write_out(path, &summary) {
+        if let Err(error) = write_out(path, &summary, args.force) {
             eprintln!("could not write {}: {error}", path.display());
             std::process::exit(2);
         }
@@ -431,5 +466,40 @@ mod tests {
         assert_eq!(short(""), "(empty)");
         assert_eq!(short("short"), "short");
         assert_eq!(short(&"x".repeat(40)).len(), 24);
+    }
+
+    #[test]
+    fn formula_prefixed_cell_values_are_escaped_in_the_out_file() {
+        // A cell from someone else's export that starts with =, +, -, @, a
+        // tab or a CR is a formula to Excel/LibreOffice/Sheets the moment the
+        // report is opened - this is the classic CSV-injection payload
+        // (https://owasp.org/www-community/attacks/CSV_Injection).
+        let summary = Summary {
+            changed: vec![(
+                "1".to_string(),
+                vec![FieldChange {
+                    column: "note".to_string(),
+                    before: "ok".to_string(),
+                    after: "=cmd|'/C calc'!A0".to_string(),
+                }],
+            )],
+            ..Summary::default()
+        };
+
+        let path = std::env::temp_dir().join(format!("csvdiff-formula-test-{}.csv", std::process::id()));
+        // force: true - this test is about escaping, not about the
+        // overwrite guard, and a stale file from a previous run must not
+        // make it flaky.
+        write_out(&path, &summary, true).expect("write_out should succeed");
+        let contents = std::fs::read_to_string(&path).expect("report should be readable");
+        std::fs::remove_file(&path).ok();
+
+        // The written cell must no longer be readable by a spreadsheet as a
+        // formula: it must start with a `'` guard, not with `=`.
+        let after_field = contents.lines().nth(1).and_then(|line| line.split(',').nth(4)).unwrap_or("");
+        assert!(
+            after_field.starts_with("'="),
+            "expected the after-value to be escaped with a leading ', got: {after_field:?}"
+        );
     }
 }
