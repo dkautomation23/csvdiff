@@ -217,8 +217,8 @@ mod tests {
         let columns = strings(&["id", "email", "phone"]);
         let changes = changed_fields(
             &columns,
-            &strings(&["1", "a@b.com"]),
-            &strings(&["1", "a@b.com", "+49170"]),
+            &strings(&["1", "a@example.com"]),
+            &strings(&["1", "a@example.com", "+49170"]),
             &[],
             Normalisation::sensible(),
         );
